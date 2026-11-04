@@ -1,0 +1,11 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+models/
+checkpoints/
+outputs/
+data/
+*.mlpackage/
+*.safetensors
+*.ckpt
