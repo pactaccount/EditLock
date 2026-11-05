@@ -1,8 +1,8 @@
 # EditLock
 
-EditLock is a local image-editing app for making a requested change while keeping user-selected parts of the original image intact.
+EditLock is a local image editor that follows a written instruction. Painting is optional: it can suggest where to focus, or enable exact outside-pixel locking when needed.
 
-**Example:** Change the background of a product photo while preserving the product and its logo.
+**Example:** Change the color of a product from a written instruction. Paint the product if the model needs a location cue. Turn on outside locking only when unchanged pixels elsewhere are essential.
 
 This is a new, independent project. Model weights and generated images stay local and are excluded from Git.
 
@@ -26,7 +26,7 @@ The FLUX.2 model files must already be in `models/cache/`. To use the browser ed
 .venv/bin/python -m editlock web --port 8765
 ```
 
-Open the localhost URL printed by that command. Import a photo, paint the whole area that may change, including shadows or a new object's footprint, enter an instruction, and choose **Generate edit**. The **Margin** control expands the painted area when an edit is cut off. Use **Original / Result** to compare, then download the protected PNG. The browser only talks to a service on this Mac.
+Open the localhost URL printed by that command. Import a photo, enter an instruction, and choose **Generate edit**. You can also paint an optional focus area and erase parts of it. The model may still change areas outside that paint. Turn on **Keep everything outside the paint unchanged** only when you need exact outside pixels; then cover the entire intended change, including shadows or a new object's footprint. Use **Original / Result** to compare, then download the PNG. The browser only talks to a service on this Mac.
 
 The native Mac demo uses the same engine:
 
@@ -43,9 +43,9 @@ The Mac app currently uses this repository's `.venv` and local model cache. The 
 - Local Apple Silicon inference: [MFLUX](https://github.com/mflux-community/mflux) through MLX
 - External evaluation: Apple's [GIE-Bench](https://github.com/apple-aiml-research/ml-gie-bench)
 
-FLUX.2's image-conditioned editing does not directly enforce a painted mask. EditLock uses a local compositor and checks that every pixel outside the selected area still matches the normalized original. The mask must be large enough to include the entire intended change; exact preservation alone does not guarantee a convincing edit.
+FLUX.2's image-conditioned editing does not directly enforce a painted mask. In the default mode, EditLock exports the model's full-image result. Optional paint becomes an approximate location cue in the instruction; Erase removes painted guidance. With outside locking enabled, a local compositor restores original pixels outside the paint and checks exact equality. Locking can clip an edit when the painted area is too small.
 
-The upstream projects and model are separate works with their own licenses. EditLock's contribution is the protected-region workflow, evaluation, and application.
+The upstream projects and model are separate works with their own licenses. EditLock's contribution is the local editing workflow, optional focus and locking modes, evaluation, and application.
 
 ## Model check on the 48 GB M5 Pro
 

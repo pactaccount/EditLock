@@ -77,6 +77,8 @@
     .brush-row input { flex: 1; accent-color: var(--accent); min-width: 0; }
     .brush-row output { min-width: 29px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
     .mask-actions { margin-top: 12px; }
+    .lock-row { display: flex; align-items: flex-start; gap: 9px; margin-top: 15px; color: var(--ink); font-size: 12px; line-height: 1.4; cursor: pointer; }
+    .lock-row input { margin: 1px 0 0; accent-color: var(--accent); }
     textarea { width: 100%; min-height: 92px; resize: vertical; border: 1px solid #bfcac5; border-radius: 8px; padding: 11px 12px; color: var(--ink); background: #fff; line-height: 1.45; font-size: 13px; }
     textarea::placeholder { color: #5d6d67; }
     textarea:focus { border-color: var(--accent); outline: 3px solid #cce8df; }
@@ -135,13 +137,13 @@
           <div class="empty" id="emptyState">
             <svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect x="4" y="6" width="40" height="34" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="17" r="4" stroke="currentColor" stroke-width="2"/><path d="m7 34 12-11 8 7 6-5 8 8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
             <h1>Choose a photo to edit</h1>
-            <p>Then paint the area that may change. Everything outside it stays from the original.</p>
+            <p>Describe the change you want. Painting a focus area is optional.</p>
             <button class="file-button" id="emptyUpload" type="button">Choose photo</button>
           </div>
           <div class="canvas-wrap" id="canvasWrap" hidden>
             <img id="sourceImage" alt="Original imported photo" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=">
             <img id="editedImage" alt="Edited result" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" hidden>
-            <canvas id="maskOverlay" aria-label="Paint the area that may change"></canvas>
+            <canvas id="maskOverlay" aria-label="Optionally paint an area to focus on"></canvas>
           </div>
         </div>
         <div class="workspace-foot" id="workspaceHelp">Drop a photo here, or choose one from your Mac.</div>
@@ -156,7 +158,7 @@
         </section>
 
         <section class="panel-section">
-          <h2 class="section-heading">Editable area</h2>
+          <h2 class="section-heading">Focus area <span style="font-weight:400;color:var(--muted)">(optional)</span></h2>
           <div class="segmented" aria-label="Mask tool">
             <button id="paintButton" type="button" aria-pressed="true">Paint</button>
             <button id="eraseButton" type="button" aria-pressed="false">Erase</button>
@@ -173,9 +175,11 @@
           </div>
           <div class="button-row mask-actions">
             <button class="secondary" id="undoButton" type="button" disabled>Undo</button>
-            <button class="secondary" id="clearButton" type="button" disabled>Clear mask</button>
+            <button class="secondary" id="clearButton" type="button" disabled>Clear paint</button>
           </div>
-          <p class="hint">Cover the object, its shadow, and anywhere a new object may appear. Increase Margin if an edit gets cut off.</p>
+          <p class="hint">Paint to suggest where the model should focus. Erase removes that suggestion. The result may change other parts of the photo.</p>
+          <label class="lock-row"><input id="lockOutside" type="checkbox">Keep everything outside the paint unchanged</label>
+          <p class="hint">Use this only when exact outside pixels matter. It needs a painted area and can cut off a larger edit.</p>
         </section>
 
         <section class="panel-section">
@@ -191,8 +195,8 @@
 
         <section class="panel-section export-section">
           <h2 class="section-heading">Export</h2>
-          <a class="secondary" id="downloadLink" aria-disabled="true" download="EditLock-result.png">Download protected PNG</a>
-          <p class="hint">EditLock checks that pixels outside your mask match the imported photo.</p>
+          <a class="secondary" id="downloadLink" aria-disabled="true" download="EditLock-result.png">Download edited PNG</a>
+          <p class="hint">Instruction-only and guided edits may change the whole image. Outside pixels stay exact only when locking is enabled.</p>
         </section>
       </aside>
     </main>
@@ -209,7 +213,7 @@
     const $ = (id) => document.getElementById(id);
     const state = {
       imagePath: null, imageURL: null, width: 0, height: 0,
-      strokes: [], current: null, tool: 'paint', brush: 55, margin: 0,
+      strokes: [], current: null, tool: 'paint', brush: 55, margin: 0, lockOutside: false,
       resultURL: null, seed: 42, busy: false, showingResult: false,
       controller: null
     };
@@ -228,7 +232,7 @@
     function updateControls() {
       const hasImage = !!state.imagePath;
       const hasPaint = state.strokes.some(s => s.tool === 'paint');
-      $('generateButton').disabled = !hasImage || !hasPaint || state.busy;
+      $('generateButton').disabled = !hasImage || (state.lockOutside && !hasPaint) || state.busy;
       $('generateButton').textContent = state.resultURL ? 'Retry edit' : 'Generate edit';
       $('undoButton').disabled = state.strokes.length === 0 || state.busy;
       $('clearButton').disabled = state.strokes.length === 0 || state.busy;
@@ -242,6 +246,7 @@
       $('eraseButton').disabled = state.busy;
       $('brushSize').disabled = state.busy;
       $('maskMargin').disabled = state.busy;
+      $('lockOutside').disabled = state.busy;
     }
     async function api(path, body, signal) {
       const response = await fetch(path, {
@@ -283,9 +288,9 @@
         $('canvasWrap').hidden = false;
         $('emptyState').hidden = true;
         $('imageName').textContent = file.name;
-        $('workspaceHelp').textContent = 'Paint the area that may change. Use Erase to refine it.';
+        $('workspaceHelp').textContent = 'Describe an edit, or paint an optional focus area first.';
         setView(false);
-        setStatus('Photo ready. Paint an editable area and describe the change.');
+        setStatus('Photo ready. Describe the change you want. Painting is optional.');
       } catch (error) { setStatus(error.message, true); }
       finally { state.busy = false; updateControls(); }
     }
@@ -341,8 +346,8 @@
       $('originalView').setAttribute('aria-pressed', !state.showingResult);
       $('resultView').setAttribute('aria-pressed', state.showingResult);
       $('workspaceHelp').textContent = state.showingResult
-        ? 'Result preview. Switch to Original to adjust the painted area.'
-        : 'Paint the area that may change. Use Erase to refine it.';
+        ? 'Result preview. Switch to Original to adjust the optional focus area.'
+        : 'Describe an edit, or paint an optional focus area first.';
     }
     async function generate() {
       if (!state.imagePath || state.busy) return;
@@ -351,21 +356,28 @@
       state.busy = true; state.controller = new AbortController(); updateControls();
       setStatus('Generating on this Mac…', false, true);
       try {
-        const uploadedMask = await api('/upload', {kind:'mask', data_url:mask.toDataURL('image/png')}, state.controller.signal);
+        const hasPaint = state.strokes.some(s => s.tool === 'paint');
+        if (state.lockOutside && !hasPaint) throw new Error('Paint an area to use outside locking.');
+        const uploadedMask = hasPaint
+          ? await api('/upload', {kind:'mask', data_url:mask.toDataURL('image/png')}, state.controller.signal)
+          : null;
+        const mode = state.lockOutside ? 'locked' : hasPaint ? 'guided' : 'free';
         const edited = await api('/edit', {
           image_path: state.imagePath,
-          mask_path: uploadedMask.image_path,
+          mask_path: uploadedMask?.image_path ?? null,
+          mode,
           instruction,
           seed: state.seed,
           feather_px: 10
         }, state.controller.signal);
-        if (!edited.protected_pixels_identical) throw new Error('The protected area changed. The result was not exported.');
+        if (edited.mode === 'locked' && !edited.protected_pixels_identical) throw new Error('The protected area changed. The result was not exported.');
         state.resultURL = edited.result_url;
         state.seed += 1;
         $('editedImage').src = edited.result_url;
         $('downloadLink').href = edited.result_url;
         setView(true);
-        setStatus('Edit ready in ' + edited.elapsed_seconds.toFixed(1) + ' seconds. Protected pixels are unchanged.');
+        const detail = edited.mode === 'locked' ? ' Outside pixels are unchanged.' : edited.mode === 'guided' ? ' Painted focus was used as guidance.' : ' Instruction-only edit.';
+        setStatus('Edit ready in ' + edited.elapsed_seconds.toFixed(1) + ' seconds.' + detail);
       } catch (error) {
         if (error.name === 'AbortError') setStatus('Request cancelled. The local model may finish its current edit.');
         else setStatus(error.message, true);
@@ -382,6 +394,7 @@
     $('eraseButton').addEventListener('click', () => setTool('erase'));
     $('brushSize').addEventListener('input', event => { state.brush = Number(event.target.value); $('brushValue').textContent = state.brush; });
     $('maskMargin').addEventListener('input', event => { state.margin = Number(event.target.value); $('marginValue').textContent = state.margin; redrawMask(); });
+    $('lockOutside').addEventListener('change', event => { state.lockOutside = event.target.checked; updateControls(); });
     $('undoButton').addEventListener('click', () => { state.strokes.pop(); redrawMask(); });
     $('clearButton').addEventListener('click', () => { state.strokes = []; redrawMask(); });
     $('originalView').addEventListener('click', () => setView(false));

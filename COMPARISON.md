@@ -1,8 +1,8 @@
-# EditLock first workflow comparison
+# EditLock locked-mode workflow comparison
 
 ## What this run checks
 
-The [baseline](BASELINE.md) sent each of 24 Apple GIE-Bench pilot photos and instructions directly to FLUX.2. This comparison sends the same photos, instructions, and dataset masks through EditLock's preparation, generation, alignment, compositing, and PNG export path. It asks whether the protected region stays exact after an edit. The run used one fixed seed per case on the 48 GB M5 Pro. It preceded a later change that gives the model the whole photo for inputs up to 1536 pixels; one case was rerun after that change and still preserved every protected pixel.
+The [baseline](BASELINE.md) sent each of 24 Apple GIE-Bench pilot photos and instructions directly to FLUX.2. This comparison sends the same photos, instructions, and dataset masks through EditLock's outside-locking path: preparation, generation, alignment, compositing, and PNG export. It asks whether the protected region stays exact after an edit. The run used one fixed seed per case on the 48 GB M5 Pro. It preceded a later change that gives the model the whole photo for inputs up to 1536 pixels; one case was rerun after that change and still preserved every protected pixel. Instruction-only and painted-guidance modes do not promise exact outside pixels and are not represented by these preservation numbers.
 
 | Measurement | Raw FLUX.2 baseline | First EditLock workflow |
 | --- | ---: | ---: |

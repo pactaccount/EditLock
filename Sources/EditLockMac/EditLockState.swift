@@ -13,7 +13,8 @@ private struct PrepareRequest: Encodable { let image_path: String }
 private struct PrepareResponse: Decodable { let image_path: String; let width: Int; let height: Int }
 private struct EditRequestBody: Encodable {
     let image_path: String
-    let mask_path: String
+    let mask_path: String?
+    let mode: String
     let instruction: String
     let seed: Int
     let feather_px: Int
@@ -21,7 +22,8 @@ private struct EditRequestBody: Encodable {
 private struct EditResponse: Decodable {
     let output_path: String
     let elapsed_seconds: Double
-    let protected_pixels_identical: Bool
+    let mode: String
+    let protected_pixels_identical: Bool?
 }
 private struct APIError: Decodable { let detail: String }
 
@@ -41,6 +43,7 @@ final class EditLockState: ObservableObject {
     @Published var instruction = ""
     @Published var brushSize = 55.0
     @Published var maskMargin = 0.0 { didSet { rebuildMaskPreview() } }
+    @Published var lockOutsidePaint = false
     @Published var erasing = false
     @Published var showResult = false
     @Published var isBusy = false
@@ -96,7 +99,7 @@ final class EditLockState: ObservableObject {
                 resultURL = nil
                 showResult = false
                 seed = 42
-                status = "Paint where the photo may change, then enter an instruction."
+                status = "Describe the change you want. Painting a focus area is optional."
             } catch {
                 errorMessage = error.localizedDescription
                 status = "Photo import failed."
@@ -124,7 +127,10 @@ final class EditLockState: ObservableObject {
 
     func generate() {
         guard sourceURL != nil else { errorMessage = "Import a photo first."; return }
-        guard !strokes.isEmpty else { errorMessage = "Paint an editable area first."; return }
+        if lockOutsidePaint && !strokes.contains(where: { !$0.erase }) {
+            errorMessage = "Paint an area before enabling outside locking."
+            return
+        }
         guard !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMessage = "Enter an edit instruction first."
             return
@@ -135,28 +141,35 @@ final class EditLockState: ObservableObject {
             defer { isBusy = false }
             do {
                 try await ensureEngine()
-                let maskURL = try writeMask()
+                let hasPaint = strokes.contains(where: { !$0.erase })
+                let maskURL = hasPaint ? try writeMask() : nil
+                let mode = lockOutsidePaint ? "locked" : hasPaint ? "guided" : "free"
                 let request = EditRequestBody(
                     image_path: sourceURL!.path,
-                    mask_path: maskURL.path,
+                    mask_path: maskURL?.path,
+                    mode: mode,
                     instruction: instruction.trimmingCharacters(in: .whitespacesAndNewlines),
                     seed: seed,
                     feather_px: 10
                 )
                 let response: EditResponse = try await post("edit", request)
-                guard response.protected_pixels_identical,
-                      let edited = NSImage(contentsOfFile: response.output_path) else {
-                    throw EditLockAppError.message("The protected result could not be opened.")
+                if response.mode == "locked" && response.protected_pixels_identical != true {
+                    throw EditLockAppError.message("Outside pixels changed, so this result was not accepted.")
+                }
+                guard let edited = NSImage(contentsOfFile: response.output_path) else {
+                    throw EditLockAppError.message("The edited result could not be opened.")
                 }
                 resultURL = URL(fileURLWithPath: response.output_path)
                 result = edited
                 showResult = true
                 seed += 1
-                status = String(format: "Edit ready in %.1f seconds. Protected pixels are unchanged.", response.elapsed_seconds)
+                let detail = response.mode == "locked" ? "Outside pixels are unchanged." :
+                    response.mode == "guided" ? "Painted focus was used as guidance." : "Instruction-only edit."
+                status = String(format: "Edit ready in %.1f seconds. %@", response.elapsed_seconds, detail)
             } catch {
                 if !Task.isCancelled {
                     errorMessage = error.localizedDescription
-                    status = "Edit failed. Adjust the mask or retry."
+                    status = "Edit failed. Adjust the instruction or retry."
                 }
             }
         }

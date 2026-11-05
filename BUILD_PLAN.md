@@ -2,7 +2,7 @@
 
 ## Goal
 
-Given an original image, a short edit instruction, and a user-selected edit area, produce an edited image that follows the instruction without changing protected areas.
+Given an original image and a short edit instruction, produce an edited image locally. Optional paint helps indicate where to focus. Exact preservation outside the paint is an explicit choice.
 
 ## 1. Start with one model
 
@@ -14,16 +14,16 @@ Run FLUX.2 on a fixed set of image-conditioned edits. Include simple object and 
 
 ## 3. Add the EditLock workflow
 
-The user imports a photo, paints the area that may change, and writes an instruction. FLUX.2 proposes an edit. EditLock places original pixels back outside the allowed area, checks the protected area and edit result, and shows the user options to accept, adjust the mask, or retry. Test seams and coherence at the mask boundary; pixel restoration alone does not make a convincing edit. The final export is a full-resolution image.
+The user imports a photo and writes an instruction. FLUX.2 proposes a full-image edit. If the user paints, EditLock adds an approximate location cue to the model instruction without restricting the result. If the user explicitly turns on outside locking, EditLock places original pixels back outside the painted area and checks them. The user can compare results, adjust paint, or retry. Test seams and coherence when locking is on; pixel restoration alone does not make a convincing edit. The final export is a full-resolution image.
 
 ## 4. Compare against the baseline
 
-On held-out images, compare FLUX.2's raw edit with EditLock's locked output. Evaluate edit success, preservation outside the mask, edge quality, and end-to-end speed. Keep a gallery of failures as well as successes. Select prompts and settings on development images; report final results only on held-out images.
+On held-out images, compare instruction-only, guided, and locked edits. Evaluate instruction success, preservation when locking is enabled, edge quality, and end-to-end speed. Keep a gallery of failures as well as successes. Select prompts and settings on development images; report final results only on held-out images.
 
 ## 5. Build the Mac app
 
-Use a simple local app with import, mask painting, instruction entry, preview, and export. Connect it to the local MFLUX inference pipeline. Keep all processing on the Mac.
+Use a simple local app with import, instruction entry, optional painting and erasing, preview, and export. Connect it to the local MFLUX inference pipeline. Keep all processing on the Mac.
 
 ## First milestone
 
-One photo + one mask + one instruction produces a saved edit, with unmasked pixels identical to the original and a before/after view. No fine-tuning is required for this milestone.
+One photo + one instruction produces a saved edit and before/after view without paint. Painted guidance and outside locking are additional paths. No fine-tuning is required for this milestone.

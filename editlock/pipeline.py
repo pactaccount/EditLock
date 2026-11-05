@@ -1,4 +1,4 @@
-"""Prepare, generate, and lock a FLUX.2 edit to an allowed image region."""
+"""Run instruction-led edits, with optional painted focus or pixel locking."""
 
 from __future__ import annotations
 
@@ -25,8 +25,9 @@ class Generator(Protocol):
 @dataclass(frozen=True)
 class EditRequest:
     image_path: Path
-    mask_path: Path
     instruction: str
+    mask_path: Path | None = None
+    mode: str = "free"
     seed: int = 42
     feather_px: int = 10
     max_model_side: int = 768
@@ -35,26 +36,41 @@ class EditRequest:
 @dataclass(frozen=True)
 class EditResult:
     session_id: str
+    mode: str
     source_path: Path
-    mask_path: Path
+    mask_path: Path | None
     candidate_path: Path
     output_path: Path
     elapsed_seconds: float
-    protected_pixels_identical: bool
+    protected_pixels_identical: bool | None
     alignment_used: bool
     alignment_score: float | None
 
 
-def load_inputs(image_path: Path, mask_path: Path) -> tuple[Image.Image, np.ndarray]:
+def load_inputs(image_path: Path, mask_path: Path | None) -> tuple[Image.Image, np.ndarray | None]:
     with Image.open(image_path) as image_file:
         source = ImageOps.exif_transpose(image_file).convert("RGB")
+    if mask_path is None:
+        return source, None
     with Image.open(mask_path) as mask_file:
         mask = np.asarray(ImageOps.exif_transpose(mask_file).convert("L")) >= 128
     if mask.shape != (source.height, source.width):
         raise ValueError("Mask dimensions must match the oriented source image exactly.")
-    if not np.any(mask):
-        raise ValueError("Paint an editable area before generating.")
     return source, mask
+
+
+def focus_instruction(instruction: str, mask: np.ndarray) -> str:
+    """Turn painted guidance into a rough location cue; do not constrain output pixels."""
+    ys, xs = np.nonzero(mask)
+    center_x = (xs.min() + xs.max()) / (2 * mask.shape[1])
+    center_y = (ys.min() + ys.max()) / (2 * mask.shape[0])
+    horizontal = "left" if center_x < 1 / 3 else "right" if center_x > 2 / 3 else "center"
+    vertical = "upper" if center_y < 1 / 3 else "lower" if center_y > 2 / 3 else "middle"
+    place = "center" if horizontal == "center" and vertical == "middle" else f"{vertical} {horizontal}"
+    return (
+        f"{instruction} Focus on the {place} part of the original image. "
+        "Make any surrounding changes needed for a natural result."
+    )
 
 
 def crop_box(mask: np.ndarray) -> tuple[int, int, int, int]:
@@ -154,52 +170,69 @@ class EditPipeline:
         instruction = request.instruction.strip()
         if not instruction:
             raise ValueError("Enter an edit instruction before generating.")
+        if request.mode not in {"free", "guided", "locked"}:
+            raise ValueError("Edit mode must be free, guided, or locked.")
+        if request.mode == "locked" and request.mask_path is None:
+            raise ValueError("Paint an area before enabling outside locking.")
         start = time.perf_counter()
-        source, mask = load_inputs(Path(request.image_path), Path(request.mask_path))
+        source, mask = load_inputs(
+            Path(request.image_path), Path(request.mask_path) if request.mask_path else None
+        )
+        if request.mode == "locked" and (mask is None or not np.any(mask)):
+            raise ValueError("Paint an area before enabling outside locking.")
+        mode = "free" if request.mode == "guided" and (mask is None or not np.any(mask)) else request.mode
         session_id = uuid.uuid4().hex[:12]
         session = self.session_root / session_id
         session.mkdir(parents=True, exist_ok=False)
 
         source_path = session / "source.png"
-        mask_path = session / "mask.png"
+        mask_path = session / "mask.png" if mask is not None else None
         candidate_path = session / "candidate.png"
         output_path = session / "result.png"
         source.save(source_path)
-        Image.fromarray(mask.astype(np.uint8) * 255, "L").save(mask_path)
+        if mask_path is not None:
+            Image.fromarray(mask.astype(np.uint8) * 255, "L").save(mask_path)
 
         # Small and medium photos benefit from the full scene context that
         # produced the stronger unmasked baseline edits. Crop large imports.
-        box = (0, 0, source.width, source.height) if max(source.size) <= 1536 else crop_box(mask)
+        box = crop_box(mask) if mode == "locked" and max(source.size) > 1536 else (0, 0, source.width, source.height)
         left, top, right, bottom = box
         crop = source.crop(box)
-        crop_mask = mask[top:bottom, left:right]
         width, height = model_size(crop.width, crop.height, request.max_model_side)
         model_input = crop.resize((width, height), Image.Resampling.LANCZOS)
         model_input_path = session / "model_input.png"
         model_input.save(model_input_path)
 
-        generated = self.generator.generate(model_input_path, instruction, width, height, request.seed)
+        model_instruction = focus_instruction(instruction, mask) if mode == "guided" else instruction
+        generated = self.generator.generate(model_input_path, model_instruction, width, height, request.seed)
         if generated.size != (width, height):
             raise RuntimeError(f"Model returned {generated.size}, expected {(width, height)}.")
         generated.convert("RGB").save(candidate_path)
-        resized_mask = np.asarray(
-            Image.fromarray(crop_mask.astype(np.uint8) * 255, "L").resize(
-                (width, height), Image.Resampling.NEAREST
-            )
-        ) >= 128
-        aligned, alignment_used, alignment_score = align_candidate(model_input, generated, resized_mask)
-        aligned = aligned.resize(crop.size, Image.Resampling.LANCZOS)
-        composed_crop = composite(crop, aligned, crop_mask, request.feather_px)
-        output = source.copy()
-        output.paste(composed_crop, (left, top))
-
-        identical = bool(np.array_equal(np.asarray(output)[~mask], np.asarray(source)[~mask]))
-        if not identical:
-            raise RuntimeError("Protected pixels changed; refusing to export the result.")
+        alignment_used, alignment_score = False, None
+        identical: bool | None = None
+        if mode == "locked":
+            assert mask is not None
+            crop_mask = mask[top:bottom, left:right]
+            resized_mask = np.asarray(
+                Image.fromarray(crop_mask.astype(np.uint8) * 255, "L").resize(
+                    (width, height), Image.Resampling.NEAREST
+                )
+            ) >= 128
+            aligned, alignment_used, alignment_score = align_candidate(model_input, generated, resized_mask)
+            aligned = aligned.resize(crop.size, Image.Resampling.LANCZOS)
+            composed_crop = composite(crop, aligned, crop_mask, request.feather_px)
+            output = source.copy()
+            output.paste(composed_crop, (left, top))
+            identical = bool(np.array_equal(np.asarray(output)[~mask], np.asarray(source)[~mask]))
+            if not identical:
+                raise RuntimeError("Protected pixels changed; refusing to export the result.")
+        else:
+            output = generated.convert("RGB").resize(source.size, Image.Resampling.LANCZOS)
         output.save(output_path, format="PNG")
         elapsed = round(time.perf_counter() - start, 2)
         result = EditResult(
             session_id=session_id,
+            mode=mode,
             source_path=source_path,
             mask_path=mask_path,
             candidate_path=candidate_path,
@@ -212,6 +245,7 @@ class EditPipeline:
         metadata = {
             **{key: str(value) if isinstance(value, Path) else value for key, value in asdict(result).items()},
             "instruction": instruction,
+            "model_instruction": model_instruction,
             "seed": request.seed,
             "feather_px": request.feather_px,
             "crop_box": box,

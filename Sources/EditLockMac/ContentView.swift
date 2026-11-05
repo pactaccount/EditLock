@@ -11,7 +11,7 @@ struct ContentView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("EditLock").font(.largeTitle.bold())
-                    Text("Change one area. Keep the rest of the photo.")
+                    Text("Describe a change. Paint a focus area if useful.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -70,7 +70,7 @@ struct ContentView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 15) {
-            Text("1  Mark the area").font(.headline)
+            Text("Optional focus area").font(.headline)
             Picker("Tool", selection: $state.erasing) {
                 Text("Paint").tag(false)
                 Text("Erase").tag(true)
@@ -94,16 +94,23 @@ struct ContentView: View {
 
             HStack {
                 Button("Undo") { state.undoStroke() }
-                Button("Clear") { state.clearMask() }
+                Button("Clear Paint") { state.clearMask() }
             }
             .disabled(state.strokes.isEmpty || state.isBusy)
 
+            Text("Paint guides the model. Erase removes part of the guide; other areas may still change.")
+                .font(.caption).foregroundStyle(.secondary)
+            Toggle("Keep outside paint unchanged", isOn: $state.lockOutsidePaint)
+                .disabled(state.photo == nil || state.isBusy)
+            Text("Exact outside locking needs paint and may cut off a larger edit.")
+                .font(.caption).foregroundStyle(.secondary)
+
             Divider()
-            Text("2  Describe the edit").font(.headline)
+            Text("Describe the edit").font(.headline)
             TextField("e.g. Change the pot to blue", text: $state.instruction, axis: .vertical)
                 .lineLimit(3...5)
                 .disabled(state.photo == nil || state.isBusy)
-            Text("Include shadows and reflections. Increase Margin if an edit gets cut off.")
+            Text("The instruction is enough to generate an edit. Painting is optional.")
                 .font(.caption).foregroundStyle(.secondary)
 
             if state.isBusy {
@@ -113,11 +120,11 @@ struct ContentView: View {
                     state.generate()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(state.photo == nil || state.strokes.isEmpty)
+                .disabled(state.photo == nil || (state.lockOutsidePaint && !state.strokes.contains(where: { !$0.erase })))
             }
 
             Divider()
-            Text("3  Review and export").font(.headline)
+            Text("Review and export").font(.headline)
             Picker("View", selection: $state.showResult) {
                 Text("Original").tag(false)
                 Text("Result").tag(true)

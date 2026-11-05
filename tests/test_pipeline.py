@@ -12,6 +12,7 @@ class GlobalChangeGenerator:
     """Simulate an editor that changes every pixel, including protected ones."""
 
     def generate(self, image_path: Path, prompt: str, width: int, height: int, seed: int) -> Image.Image:
+        self.last_prompt = prompt
         return Image.new("RGB", (width, height), (220, 20, 20))
 
 
@@ -30,13 +31,47 @@ class EditPipelineTests(unittest.TestCase):
             Image.fromarray(mask).save(mask_path)
 
             result = EditPipeline(GlobalChangeGenerator(), root / "sessions").run(
-                EditRequest(image_path, mask_path, "Make the object red", feather_px=8)
+                EditRequest(image_path, "Make the object red", mask_path=mask_path, mode="locked", feather_px=8)
             )
             output = np.asarray(Image.open(result.output_path).convert("RGB"))
             self.assertEqual(output.shape, original.shape)
             self.assertTrue(result.protected_pixels_identical)
             self.assertTrue(np.array_equal(output[mask == 0], original[mask == 0]))
             self.assertFalse(np.array_equal(output[mask == 255], original[mask == 255]))
+
+    def test_instruction_only_edit_needs_no_mask_and_keeps_full_model_result(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            image_path = root / "source.png"
+            Image.new("RGB", (480, 320), (20, 40, 60)).save(image_path)
+            generator = GlobalChangeGenerator()
+            result = EditPipeline(generator, root / "sessions").run(
+                EditRequest(image_path, "Make the whole scene red")
+            )
+            output = np.asarray(Image.open(result.output_path))
+            self.assertEqual(result.mode, "free")
+            self.assertIsNone(result.mask_path)
+            self.assertIsNone(result.protected_pixels_identical)
+            self.assertTrue(np.all(output == [220, 20, 20]))
+            self.assertEqual(generator.last_prompt, "Make the whole scene red")
+
+    def test_paint_guides_model_without_locking_other_pixels(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            image_path, mask_path = root / "source.png", root / "mask.png"
+            Image.new("RGB", (480, 320), (20, 40, 60)).save(image_path)
+            mask = np.zeros((320, 480), dtype=np.uint8)
+            mask[20:90, 30:100] = 255
+            Image.fromarray(mask).save(mask_path)
+            generator = GlobalChangeGenerator()
+            result = EditPipeline(generator, root / "sessions").run(
+                EditRequest(image_path, "Make the object red", mask_path=mask_path, mode="guided")
+            )
+            output = np.asarray(Image.open(result.output_path))
+            self.assertEqual(result.mode, "guided")
+            self.assertIsNone(result.protected_pixels_identical)
+            self.assertTrue(np.all(output[mask == 0] == [220, 20, 20]))
+            self.assertIn("upper left", generator.last_prompt)
 
     def test_feather_never_changes_pixels_outside_mask(self):
         source = Image.new("RGB", (80, 80), (25, 50, 75))

@@ -28,6 +28,7 @@ def main():
             image_path=ROOT / case["source_image"],
             mask_path=ROOT / case["edit_mask"],
             instruction=case["instruction"],
+            mode="locked",
             seed=42,
         ))
         shutil.copyfile(result.output_path, output)

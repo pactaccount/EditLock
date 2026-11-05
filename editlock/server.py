@@ -23,7 +23,8 @@ from .pipeline import ROOT
 
 class EditPayload(BaseModel):
     image_path: str
-    mask_path: str
+    mask_path: str | None = None
+    mode: str = Field(default="free", pattern="^(free|guided|locked)$")
     instruction: str = Field(min_length=1)
     seed: int = 42
     feather_px: int = Field(default=10, ge=0, le=100)
@@ -129,13 +130,14 @@ def create_app(token: str, pipeline: EditPipeline | None = None) -> FastAPI:
         if job_lock.locked():
             raise HTTPException(status_code=409, detail="Another edit is running.")
         image_path = Path(payload.image_path).expanduser()
-        mask_path = Path(payload.mask_path).expanduser()
-        if not image_path.is_file() or not mask_path.is_file():
+        mask_path = Path(payload.mask_path).expanduser() if payload.mask_path else None
+        if not image_path.is_file() or (mask_path is not None and not mask_path.is_file()):
             raise HTTPException(status_code=400, detail="Image or mask file does not exist.")
         request = EditRequest(
             image_path=image_path,
             mask_path=mask_path,
             instruction=payload.instruction,
+            mode=payload.mode,
             seed=payload.seed,
             feather_px=payload.feather_px,
         )
@@ -148,8 +150,9 @@ def create_app(token: str, pipeline: EditPipeline | None = None) -> FastAPI:
                 raise HTTPException(status_code=500, detail=f"Edit failed: {exc}") from exc
         return {
             "session_id": result.session_id,
+            "mode": result.mode,
             "source_path": str(result.source_path),
-            "mask_path": str(result.mask_path),
+            "mask_path": str(result.mask_path) if result.mask_path else None,
             "candidate_path": str(result.candidate_path),
             "output_path": str(result.output_path),
             "elapsed_seconds": result.elapsed_seconds,

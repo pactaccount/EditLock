@@ -15,9 +15,10 @@ from .pipeline import EditPipeline, EditRequest
 def main():
     parser = argparse.ArgumentParser(prog="editlock")
     commands = parser.add_subparsers(dest="command", required=True)
-    edit = commands.add_parser("edit", help="Make one protected image edit")
+    edit = commands.add_parser("edit", help="Make one local image edit")
     edit.add_argument("--image", type=Path, required=True)
-    edit.add_argument("--mask", type=Path, required=True)
+    edit.add_argument("--mask", type=Path)
+    edit.add_argument("--mode", choices=["free", "guided", "locked"], default="free")
     edit.add_argument("--instruction", required=True)
     edit.add_argument("--output", type=Path)
     edit.add_argument("--seed", type=int, default=42)
@@ -43,8 +44,9 @@ def main():
     engine = EditPipeline(FluxGenerator())
     result = engine.run(EditRequest(
         image_path=args.image,
-        mask_path=args.mask,
         instruction=args.instruction,
+        mask_path=args.mask,
+        mode=args.mode,
         seed=args.seed,
         feather_px=args.feather,
         max_model_side=args.max_side,
@@ -54,6 +56,7 @@ def main():
         shutil.copyfile(result.output_path, args.output)
     print(json.dumps({
         "session_id": result.session_id,
+        "mode": result.mode,
         "output_path": str(args.output or result.output_path),
         "candidate_path": str(result.candidate_path),
         "elapsed_seconds": result.elapsed_seconds,
