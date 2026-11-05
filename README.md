@@ -10,6 +10,7 @@ See [BUILD_PLAN.md](BUILD_PLAN.md) for the high-level plan and success criteria.
 See [BASELINE.md](BASELINE.md) for the completed 24-case FLUX.2 evaluation and the build decision it supports.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the engineering design and build order.
 See [COMPARISON.md](COMPARISON.md) for the first full-workflow comparison and its limitations.
+See [CAR_EVALUATION.md](CAR_EVALUATION.md) for 12 creative car-image instructions and their completed results.
 
 ## Use EditLock
 

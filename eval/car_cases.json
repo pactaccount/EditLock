@@ -1,0 +1,86 @@
+[
+  {
+    "id": "C01",
+    "image": "cars/2014-Koenigsegg-Agera-One-1-004-1600.jpg",
+    "category": "Car scale",
+    "prompt": "Move the silver Koenigsegg farther down the runway so it appears about half its current size. Keep the same cloudy sky, runway, and front three-quarter camera angle.",
+    "checks": ["car visibly smaller", "same runway and cloudy sky", "recognizable car and view"]
+  },
+  {
+    "id": "C02",
+    "image": "cars/2016-Lamborghini-Aventador-LP750-4-SV-017-2000-scaled.jpg",
+    "category": "Night lighting",
+    "prompt": "Turn this daylight racetrack into a nighttime race scene with bright track floodlights and realistic reflections. Keep the matte gray Lamborghini, its front three-quarter view, and sense of speed.",
+    "checks": ["nighttime track", "floodlights and reflections", "recognizable gray car and view"]
+  },
+  {
+    "id": "C03",
+    "image": "cars/2016-Lamborghini-Aventador-LP750-4-SV-018-2000-scaled.jpg",
+    "category": "Object removal",
+    "prompt": "Remove the rows of tall cylindrical columns behind the yellow Lamborghini and replace them with a clean open plaza. Keep the yellow car, paved ground, and sunny lighting.",
+    "checks": ["columns removed", "open plaza", "yellow car and sunny lighting retained"]
+  },
+  {
+    "id": "C04",
+    "image": "cars/2020-Aston-Martin-Victor-005-2160-scaled.jpg",
+    "category": "Ground replacement",
+    "prompt": "Replace the gravel and garden strip around the dark green Aston Martin with a clean paved city street. Keep the brick palace building and the car's shape, color, and position.",
+    "checks": ["gravel and garden replaced by pavement", "brick building retained", "car shape and position retained"]
+  },
+  {
+    "id": "C05",
+    "image": "cars/2020-Koenigsegg-Jesko-009-2160-scaled.jpg",
+    "category": "Weather and ground",
+    "prompt": "Change the mountain runway at sunset into a bright clear midday scene. Remove the grass beside the runway and replace it with paved shoulder, while keeping the white Koenigsegg in the same position.",
+    "checks": ["bright midday scene", "grass replaced by paved shoulder", "white car and position retained"]
+  },
+  {
+    "id": "C06",
+    "image": "cars/2022-Bentley-Continental-GT-Speed-008-2160-2048x1152.jpg",
+    "category": "Body color",
+    "prompt": "Repaint only the silver Bentley body deep metallic emerald green. Keep the grille, headlights, wheels, road, trees, and motion blur recognizable.",
+    "checks": ["body is emerald green", "car details retained", "road and motion blur retained"]
+  },
+  {
+    "id": "C07",
+    "image": "cars/2025-Lamborghini-Temerario-001-2160-scaled-1-2048x1152.jpg",
+    "category": "Background replacement",
+    "prompt": "Replace the ocean and hazy beach behind the dark blue Lamborghini with a dense modern city skyline at dusk. Keep the car, asphalt foreground, and front three-quarter camera angle.",
+    "checks": ["ocean replaced by city skyline", "dusk lighting", "blue car and angle retained"]
+  },
+  {
+    "id": "C08",
+    "image": "cars/2025-Lamborghini-Temerario-003-2160-scaled-1-2048x1152.jpg",
+    "category": "Weather change",
+    "prompt": "Make the overcast seaside scene look like a clear sunny morning with blue sky and brighter ocean. Keep the dark blue Lamborghini, roadside fence, and rear camera viewpoint.",
+    "checks": ["clear sunny sky", "ocean brighter", "car, fence, and view retained"]
+  },
+  {
+    "id": "C09",
+    "image": "cars/3f70f9e26b4bb6a64a9c7bab6dd9125d.jpeg",
+    "category": "Rain and reflections",
+    "prompt": "Add a light rainstorm to the forest road, making the asphalt wet with realistic reflections under the silver Koenigsegg. Keep the car's front view and the same winding road.",
+    "checks": ["rain visible", "wet reflective road", "car and winding road retained"]
+  },
+  {
+    "id": "C10",
+    "image": "cars/802c9c8a47057cd5d212e13204f97acf.jpg",
+    "category": "Multi-step scene edit",
+    "prompt": "Replace the grass under the BMW with a paved road, turn the stormy sunset into a sunny clear afternoon, and make the car about 25% smaller while keeping its front-on view.",
+    "checks": ["grass replaced by paved road", "sunny afternoon", "car about 25% smaller", "front view retained"]
+  },
+  {
+    "id": "C11",
+    "image": "cars/BMW M2 with four illuminated projectors.png",
+    "category": "Studio body color",
+    "prompt": "Change the silver BMW M2 body to glossy cobalt blue. Keep the four bright circular headlights, front view, and dark studio background.",
+    "checks": ["body is cobalt blue", "four headlights retained", "front view and dark studio retained"]
+  },
+  {
+    "id": "C12",
+    "image": "cars/download.png",
+    "category": "Headlight state",
+    "prompt": "Turn off all four circular headlights on the BMW, leaving the lamps dark. Keep the silver body, frontal view, and dark studio setting.",
+    "checks": ["four headlights turned off", "silver body retained", "front view and studio retained"]
+  }
+]
