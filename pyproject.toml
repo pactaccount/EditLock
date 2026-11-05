@@ -1,0 +1,14 @@
+[project]
+name = "editlock"
+version = "0.1.0"
+description = "On-device, mask-protected image editing for macOS"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "mflux==0.24.0",
+  "fastapi>=0.116,<1",
+  "uvicorn>=0.35,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

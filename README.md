@@ -9,6 +9,33 @@ This is a new, independent project. Model weights and generated images stay loca
 See [BUILD_PLAN.md](BUILD_PLAN.md) for the high-level plan and success criteria.
 See [BASELINE.md](BASELINE.md) for the completed 24-case FLUX.2 evaluation and the build decision it supports.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the engineering design and build order.
+See [COMPARISON.md](COMPARISON.md) for the first full-workflow comparison and its limitations.
+
+## Use EditLock
+
+From this directory, create the local Python environment and install the app dependencies if needed:
+
+```sh
+UV_CACHE_DIR="$PWD/.cache/uv" uv venv --python 3.13 .venv
+UV_CACHE_DIR="$PWD/.cache/uv" uv pip install --python .venv/bin/python -e .
+```
+
+The FLUX.2 model files must already be in `models/cache/`. To use the browser editor, run:
+
+```sh
+.venv/bin/python -m editlock web --port 8765
+```
+
+Open the localhost URL printed by that command. Import a photo, paint the whole area that may change, including shadows or a new object's footprint, enter an instruction, and choose **Generate edit**. The **Margin** control expands the painted area when an edit is cut off. Use **Original / Result** to compare, then download the protected PNG. The browser only talks to a service on this Mac.
+
+The native Mac demo uses the same engine:
+
+```sh
+scripts/build_mac_app.sh
+open dist/EditLock.app
+```
+
+The Mac app currently uses this repository's `.venv` and local model cache. The browser editor is the simplest way to try the finished workflow. Outputs and edit sessions are saved under `outputs/` and are excluded from Git.
 
 ## Starting points
 
@@ -16,7 +43,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the engineering design and build orde
 - Local Apple Silicon inference: [MFLUX](https://github.com/mflux-community/mflux) through MLX
 - External evaluation: Apple's [GIE-Bench](https://github.com/apple-aiml-research/ml-gie-bench)
 
-FLUX.2's image-conditioned editing does not directly enforce a painted mask. EditLock will need its own region-preserving workflow and must test whether edits stay within the allowed area before claiming that behavior.
+FLUX.2's image-conditioned editing does not directly enforce a painted mask. EditLock uses a local compositor and checks that every pixel outside the selected area still matches the normalized original. The mask must be large enough to include the entire intended change; exact preservation alone does not guarantee a convincing edit.
 
 The upstream projects and model are separate works with their own licenses. EditLock's contribution is the protected-region workflow, evaluation, and application.
 
@@ -33,7 +60,7 @@ To repeat from this directory, use Python 3.13 and `uv`:
 
 ```sh
 UV_CACHE_DIR="$PWD/.cache/uv" uv venv --python 3.13 .venv
-UV_CACHE_DIR="$PWD/.cache/uv" uv pip install --python .venv/bin/python mflux==0.24.0
+UV_CACHE_DIR="$PWD/.cache/uv" uv pip install --python .venv/bin/python -e .
 HF_HOME="$PWD/models/cache" .venv/bin/mflux-generate-flux2-edit \
   --model flux2-klein-4b \
   --image-paths outputs/flux2-smoke.png \

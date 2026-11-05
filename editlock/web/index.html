@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>EditLock — Local image editor</title>
+  <style>
+    :root {
+      --paper: #f4f3ef;
+      --panel: #ffffff;
+      --ink: #192323;
+      --muted: #53615f;
+      --line: #d8deda;
+      --accent: #155e54;
+      --accent-hover: #0c4c43;
+      --danger: #af4040;
+      --stage: #202827;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      font-synthesis: none;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; min-width: 320px; }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .48; }
+    :focus-visible { outline: 3px solid #68afa5; outline-offset: 3px; }
+    ::selection { background: #bde1d8; color: #142b28; }
+    .app { min-height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 24px; background: var(--panel); border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 11px; font-size: 20px; font-weight: 720; letter-spacing: -.025em; }
+    .brand-mark { width: 30px; height: 30px; color: var(--accent); }
+    .header-meta { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13px; }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #2e967a; }
+    main { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 338px; }
+    .workspace { min-width: 0; min-height: 520px; padding: 22px; background: var(--stage); display: flex; flex-direction: column; }
+    .workspace-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #eaf2ef; margin-bottom: 15px; }
+    .workspace-title { font-size: 13px; font-weight: 650; letter-spacing: .01em; }
+    .view-switch { display: inline-flex; padding: 3px; background: #34413e; border-radius: 9px; gap: 2px; }
+    .view-switch button { border: 0; background: transparent; color: #c4d0cc; padding: 6px 11px; border-radius: 6px; font-size: 12px; font-weight: 650; }
+    .view-switch button[aria-pressed="true"] { background: #f1f5f2; color: #1b2d29; }
+    .view-switch button:disabled { opacity: .42; }
+    .stage { flex: 1; min-height: 0; display: grid; place-items: center; border: 1px solid #3e4a47; background: #283230; border-radius: 12px; overflow: hidden; position: relative; }
+    .stage.dragging { border-color: #7fc4b7; background: #30423d; }
+    .empty { max-width: 380px; padding: 32px; text-align: center; color: #dce7e3; }
+    .empty svg { width: 44px; height: 44px; color: #8cb8ad; }
+    .empty h1 { font-size: 24px; line-height: 1.18; letter-spacing: -.026em; margin: 19px 0 9px; font-weight: 650; }
+    .empty p { color: #b8c8c3; line-height: 1.5; margin: 0 0 20px; font-size: 14px; }
+    .canvas-wrap { position: relative; max-width: calc(100% - 28px); max-height: calc(100% - 28px); width: min(100%, calc((100vh - 220px) * var(--aspect, 1))); aspect-ratio: var(--aspect, 1); box-shadow: 0 14px 40px rgba(0, 0, 0, .25); background: #e8eae8; }
+    .canvas-wrap img, .canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .canvas-wrap img { object-fit: fill; }
+    #maskOverlay { touch-action: none; cursor: crosshair; }
+    .workspace-foot { color: #b4c1bd; font-size: 12px; line-height: 1.4; padding-top: 12px; min-height: 29px; }
+    aside { min-width: 0; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+    .panel-section { padding: 22px 24px; border-bottom: 1px solid var(--line); }
+    .section-heading { margin: 0 0 14px; font-size: 14px; font-weight: 700; letter-spacing: -.005em; }
+    .field-label { display: block; color: var(--muted); font-size: 12px; font-weight: 650; margin-bottom: 7px; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.45; margin: 10px 0 0; }
+    .file-button, .primary, .secondary, .subtle { border-radius: 8px; min-height: 37px; padding: 8px 12px; font-size: 13px; font-weight: 650; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+    .file-button, .secondary { background: #fff; border: 1px solid #bfcac5; color: var(--ink); }
+    .file-button:hover, .secondary:hover { background: #eef4f1; border-color: #98b6ac; }
+    .file-button { display: inline-flex; align-items: center; justify-content: center; text-align: center; width: 100%; }
+    .primary { background: var(--accent); border: 1px solid var(--accent); color: white; width: 100%; }
+    .primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .subtle { border: 0; color: var(--muted); background: transparent; }
+    .subtle:hover:not(:disabled) { background: #edf2ef; color: var(--ink); }
+    .button-row { display: flex; gap: 8px; }
+    .button-row > * { flex: 1; }
+    .segmented { display: flex; padding: 3px; background: #edf1ee; border-radius: 9px; gap: 2px; }
+    .segmented button { flex: 1; border: 0; border-radius: 6px; padding: 7px 10px; background: transparent; color: #485a55; font-size: 12px; font-weight: 650; }
+    .segmented button[aria-pressed="true"] { background: #fff; color: var(--accent); box-shadow: 0 1px 3px rgba(15, 34, 27, .1); }
+    .brush-row { display: flex; align-items: center; gap: 11px; margin-top: 16px; }
+    .brush-row label { color: var(--muted); font-size: 12px; font-weight: 650; }
+    .brush-row input { flex: 1; accent-color: var(--accent); min-width: 0; }
+    .brush-row output { min-width: 29px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+    .mask-actions { margin-top: 12px; }
+    textarea { width: 100%; min-height: 92px; resize: vertical; border: 1px solid #bfcac5; border-radius: 8px; padding: 11px 12px; color: var(--ink); background: #fff; line-height: 1.45; font-size: 13px; }
+    textarea::placeholder { color: #5d6d67; }
+    textarea:focus { border-color: var(--accent); outline: 3px solid #cce8df; }
+    .generate-row { margin-top: 14px; display: flex; gap: 8px; }
+    .generate-row .primary { flex: 1; }
+    #cancelButton { display: none; color: var(--danger); }
+    .export-section { margin-top: auto; border-top: 1px solid var(--line); border-bottom: 0; }
+    #downloadLink { display: block; text-decoration: none; text-align: center; }
+    #downloadLink[aria-disabled="true"] { pointer-events: none; opacity: .45; }
+    footer { background: #fff; border-top: 1px solid var(--line); min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 8px 24px; color: var(--muted); font-size: 12px; }
+    #status { color: var(--ink); }
+    #status.error { color: var(--danger); }
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #b3d6cb; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin-right: 7px; vertical-align: -2px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      .workspace { min-height: 460px; height: 58vh; padding: 16px; }
+      aside { border-left: 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .export-section { margin: 0; border-top: 0; }
+      .canvas-wrap { width: min(100%, calc((58vh - 120px) * var(--aspect, 1))); }
+    }
+    @media (max-width: 600px) {
+      header { padding: 13px 16px; }
+      .header-meta { font-size: 11px; }
+      .workspace { height: 48vh; min-height: 350px; padding: 12px; }
+      .canvas-wrap { width: min(100%, calc((48vh - 110px) * var(--aspect, 1))); }
+      aside { display: block; }
+      .panel-section { padding: 18px 16px; }
+      footer { padding: 8px 16px; align-items: flex-start; flex-direction: column; gap: 3px; }
+      .empty { padding: 20px; }
+      .empty h1 { font-size: 21px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="4.5" y="10" width="23" height="18" rx="4" stroke="currentColor" stroke-width="2.5"/><path d="M11 10V7.5a5 5 0 0 1 10 0V10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M16 17v4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+        <span>EditLock</span>
+      </div>
+      <div class="header-meta"><span class="live-dot"></span><span>On this Mac · FLUX.2 Klein 4B</span></div>
+    </header>
+
+    <main>
+      <section class="workspace" aria-label="Image editing workspace">
+        <div class="workspace-head">
+          <div class="workspace-title" id="imageName">Your photo</div>
+          <div class="view-switch" aria-label="Image view">
+            <button id="originalView" type="button" aria-pressed="true">Original</button>
+            <button id="resultView" type="button" aria-pressed="false" disabled>Result</button>
+          </div>
+        </div>
+        <div class="stage" id="stage">
+          <div class="empty" id="emptyState">
+            <svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect x="4" y="6" width="40" height="34" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="17" r="4" stroke="currentColor" stroke-width="2"/><path d="m7 34 12-11 8 7 6-5 8 8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+            <h1>Choose a photo to edit</h1>
+            <p>Then paint the area that may change. Everything outside it stays from the original.</p>
+            <button class="file-button" id="emptyUpload" type="button">Choose photo</button>
+          </div>
+          <div class="canvas-wrap" id="canvasWrap" hidden>
+            <img id="sourceImage" alt="Original imported photo" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=">
+            <img id="editedImage" alt="Edited result" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" hidden>
+            <canvas id="maskOverlay" aria-label="Paint the area that may change"></canvas>
+          </div>
+        </div>
+        <div class="workspace-foot" id="workspaceHelp">Drop a photo here, or choose one from your Mac.</div>
+      </section>
+
+      <aside aria-label="Edit controls">
+        <section class="panel-section">
+          <h2 class="section-heading">Photo</h2>
+          <input id="fileInput" type="file" accept="image/*" hidden>
+          <button class="file-button" id="uploadButton" type="button">Choose photo</button>
+          <p class="hint">PNG, JPEG, or another image your browser can open. Your photo stays on this Mac.</p>
+        </section>
+
+        <section class="panel-section">
+          <h2 class="section-heading">Editable area</h2>
+          <div class="segmented" aria-label="Mask tool">
+            <button id="paintButton" type="button" aria-pressed="true">Paint</button>
+            <button id="eraseButton" type="button" aria-pressed="false">Erase</button>
+          </div>
+          <div class="brush-row">
+            <label for="brushSize">Brush</label>
+            <input id="brushSize" type="range" min="8" max="180" value="55">
+            <output id="brushValue" for="brushSize">55</output>
+          </div>
+          <div class="brush-row">
+            <label for="maskMargin">Margin</label>
+            <input id="maskMargin" type="range" min="0" max="80" value="0">
+            <output id="marginValue" for="maskMargin">0</output>
+          </div>
+          <div class="button-row mask-actions">
+            <button class="secondary" id="undoButton" type="button" disabled>Undo</button>
+            <button class="secondary" id="clearButton" type="button" disabled>Clear mask</button>
+          </div>
+          <p class="hint">Cover the object, its shadow, and anywhere a new object may appear. Increase Margin if an edit gets cut off.</p>
+        </section>
+
+        <section class="panel-section">
+          <h2 class="section-heading">Instruction</h2>
+          <label class="field-label" for="instruction">What should change?</label>
+          <textarea id="instruction" placeholder="For example: Change the white pot to blue."></textarea>
+          <div class="generate-row">
+            <button class="primary" id="generateButton" type="button" disabled>Generate edit</button>
+            <button class="secondary" id="cancelButton" type="button">Cancel</button>
+          </div>
+          <p class="hint">An edit usually takes several seconds. Retry makes another version.</p>
+        </section>
+
+        <section class="panel-section export-section">
+          <h2 class="section-heading">Export</h2>
+          <a class="secondary" id="downloadLink" aria-disabled="true" download="EditLock-result.png">Download protected PNG</a>
+          <p class="hint">EditLock checks that pixels outside your mask match the imported photo.</p>
+        </section>
+      </aside>
+    </main>
+
+    <footer>
+      <span id="status" role="status" aria-live="polite">Ready. Choose a photo to begin.</span>
+      <span>Local editing · no cloud upload</span>
+    </footer>
+  </div>
+
+  <script>
+    const TOKEN = __EDITLOCK_TOKEN__;
+    const BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      imagePath: null, imageURL: null, width: 0, height: 0,
+      strokes: [], current: null, tool: 'paint', brush: 55, margin: 0,
+      resultURL: null, seed: 42, busy: false, showingResult: false,
+      controller: null
+    };
+    const overlay = $('maskOverlay');
+    const overlayCtx = overlay.getContext('2d');
+    const mask = document.createElement('canvas');
+    const maskCtx = mask.getContext('2d');
+
+    function setStatus(message, error = false, loading = false) {
+      $('status').classList.toggle('error', error);
+      $('status').innerHTML = loading ? '<span class="spinner" aria-hidden="true"></span>' + escapeHTML(message) : escapeHTML(message);
+    }
+    function escapeHTML(text) {
+      return String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function updateControls() {
+      const hasImage = !!state.imagePath;
+      const hasPaint = state.strokes.some(s => s.tool === 'paint');
+      $('generateButton').disabled = !hasImage || !hasPaint || state.busy;
+      $('generateButton').textContent = state.resultURL ? 'Retry edit' : 'Generate edit';
+      $('undoButton').disabled = state.strokes.length === 0 || state.busy;
+      $('clearButton').disabled = state.strokes.length === 0 || state.busy;
+      $('uploadButton').disabled = state.busy;
+      $('emptyUpload').disabled = state.busy;
+      $('resultView').disabled = !state.resultURL;
+      $('cancelButton').style.display = state.busy ? 'block' : 'none';
+      $('downloadLink').setAttribute('aria-disabled', state.resultURL ? 'false' : 'true');
+      $('instruction').disabled = state.busy;
+      $('paintButton').disabled = state.busy;
+      $('eraseButton').disabled = state.busy;
+      $('brushSize').disabled = state.busy;
+      $('maskMargin').disabled = state.busy;
+    }
+    async function api(path, body, signal) {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'X-EditLock-Token':TOKEN},
+        body: JSON.stringify(body), signal
+      });
+      let data;
+      try { data = await response.json(); } catch { throw new Error('The local editor did not return a readable response.'); }
+      if (!response.ok) throw new Error(data.detail || 'The local editor could not complete this request.');
+      return data;
+    }
+    function fileDataURL(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('The photo could not be read.'));
+        reader.readAsDataURL(file);
+      });
+    }
+    async function importFile(file) {
+      if (!file || !file.type.startsWith('image/')) { setStatus('Choose an image file.', true); return; }
+      state.busy = true; updateControls(); setStatus('Preparing photo…', false, true);
+      try {
+        const dataURL = await fileDataURL(file);
+        const uploaded = await api('/upload', {kind:'photo', data_url:dataURL});
+        state.imagePath = uploaded.image_path;
+        state.imageURL = uploaded.asset_url;
+        state.width = uploaded.width; state.height = uploaded.height;
+        state.strokes = []; state.current = null; state.resultURL = null; state.seed = 42;
+        state.showingResult = false;
+        overlay.width = mask.width = state.width;
+        overlay.height = mask.height = state.height;
+        maskCtx.fillStyle = '#000'; maskCtx.fillRect(0, 0, mask.width, mask.height);
+        overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+        $('sourceImage').src = state.imageURL;
+        $('editedImage').src = BLANK_IMAGE;
+        $('canvasWrap').style.setProperty('--aspect', state.width / state.height);
+        $('canvasWrap').hidden = false;
+        $('emptyState').hidden = true;
+        $('imageName').textContent = file.name;
+        $('workspaceHelp').textContent = 'Paint the area that may change. Use Erase to refine it.';
+        setView(false);
+        setStatus('Photo ready. Paint an editable area and describe the change.');
+      } catch (error) { setStatus(error.message, true); }
+      finally { state.busy = false; updateControls(); }
+    }
+    function pointFromEvent(event) {
+      const rect = overlay.getBoundingClientRect();
+      return {
+        x: Math.max(0, Math.min(state.width, (event.clientX - rect.left) * state.width / rect.width)),
+        y: Math.max(0, Math.min(state.height, (event.clientY - rect.top) * state.height / rect.height))
+      };
+    }
+    function drawStroke(ctx, stroke, onOverlay) {
+      const points = stroke.points;
+      if (!points.length) return;
+      ctx.save();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = stroke.brush + 2 * state.margin;
+      ctx.globalCompositeOperation = onOverlay && stroke.tool === 'erase' ? 'destination-out' : 'source-over';
+      ctx.strokeStyle = onOverlay ? (stroke.tool === 'erase' ? 'rgba(0,0,0,1)' : 'rgba(245,75,74,.58)') : (stroke.tool === 'erase' ? '#000' : '#fff');
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
+      if (points.length === 1) {
+        ctx.arc(points[0].x, points[0].y, (stroke.brush + 2 * state.margin) / 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    function redrawMask() {
+      maskCtx.globalCompositeOperation = 'source-over';
+      maskCtx.fillStyle = '#000'; maskCtx.fillRect(0, 0, mask.width, mask.height);
+      overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+      for (const stroke of state.strokes) {
+        drawStroke(maskCtx, stroke, false);
+        drawStroke(overlayCtx, stroke, true);
+      }
+      if (state.current) {
+        drawStroke(maskCtx, state.current, false);
+        drawStroke(overlayCtx, state.current, true);
+      }
+      updateControls();
+    }
+    function setTool(tool) {
+      state.tool = tool;
+      $('paintButton').setAttribute('aria-pressed', tool === 'paint');
+      $('eraseButton').setAttribute('aria-pressed', tool === 'erase');
+    }
+    function setView(result) {
+      state.showingResult = result && !!state.resultURL;
+      $('sourceImage').hidden = state.showingResult;
+      $('editedImage').hidden = !state.showingResult;
+      overlay.hidden = state.showingResult;
+      $('originalView').setAttribute('aria-pressed', !state.showingResult);
+      $('resultView').setAttribute('aria-pressed', state.showingResult);
+      $('workspaceHelp').textContent = state.showingResult
+        ? 'Result preview. Switch to Original to adjust the painted area.'
+        : 'Paint the area that may change. Use Erase to refine it.';
+    }
+    async function generate() {
+      if (!state.imagePath || state.busy) return;
+      const instruction = $('instruction').value.trim();
+      if (!instruction) { setStatus('Describe what should change before generating.', true); $('instruction').focus(); return; }
+      state.busy = true; state.controller = new AbortController(); updateControls();
+      setStatus('Generating on this Mac…', false, true);
+      try {
+        const uploadedMask = await api('/upload', {kind:'mask', data_url:mask.toDataURL('image/png')}, state.controller.signal);
+        const edited = await api('/edit', {
+          image_path: state.imagePath,
+          mask_path: uploadedMask.image_path,
+          instruction,
+          seed: state.seed,
+          feather_px: 10
+        }, state.controller.signal);
+        if (!edited.protected_pixels_identical) throw new Error('The protected area changed. The result was not exported.');
+        state.resultURL = edited.result_url;
+        state.seed += 1;
+        $('editedImage').src = edited.result_url;
+        $('downloadLink').href = edited.result_url;
+        setView(true);
+        setStatus('Edit ready in ' + edited.elapsed_seconds.toFixed(1) + ' seconds. Protected pixels are unchanged.');
+      } catch (error) {
+        if (error.name === 'AbortError') setStatus('Request cancelled. The local model may finish its current edit.');
+        else setStatus(error.message, true);
+      } finally { state.busy = false; state.controller = null; updateControls(); }
+    }
+
+    $('uploadButton').addEventListener('click', () => $('fileInput').click());
+    $('emptyUpload').addEventListener('click', () => $('fileInput').click());
+    $('fileInput').addEventListener('change', event => { importFile(event.target.files[0]); event.target.value = ''; });
+    $('stage').addEventListener('dragover', event => { event.preventDefault(); $('stage').classList.add('dragging'); });
+    $('stage').addEventListener('dragleave', () => $('stage').classList.remove('dragging'));
+    $('stage').addEventListener('drop', event => { event.preventDefault(); $('stage').classList.remove('dragging'); importFile(event.dataTransfer.files[0]); });
+    $('paintButton').addEventListener('click', () => setTool('paint'));
+    $('eraseButton').addEventListener('click', () => setTool('erase'));
+    $('brushSize').addEventListener('input', event => { state.brush = Number(event.target.value); $('brushValue').textContent = state.brush; });
+    $('maskMargin').addEventListener('input', event => { state.margin = Number(event.target.value); $('marginValue').textContent = state.margin; redrawMask(); });
+    $('undoButton').addEventListener('click', () => { state.strokes.pop(); redrawMask(); });
+    $('clearButton').addEventListener('click', () => { state.strokes = []; redrawMask(); });
+    $('originalView').addEventListener('click', () => setView(false));
+    $('resultView').addEventListener('click', () => setView(true));
+    $('generateButton').addEventListener('click', generate);
+    $('cancelButton').addEventListener('click', () => state.controller?.abort());
+    overlay.addEventListener('pointerdown', event => {
+      if (!state.imagePath || state.busy || state.showingResult) return;
+      event.preventDefault(); overlay.setPointerCapture(event.pointerId);
+      state.current = {tool: state.tool, brush: state.brush, points: [pointFromEvent(event)]};
+      redrawMask();
+    });
+    overlay.addEventListener('pointermove', event => {
+      if (!state.current) return;
+      event.preventDefault();
+      const point = pointFromEvent(event);
+      const last = state.current.points.at(-1);
+      if (Math.hypot(point.x - last.x, point.y - last.y) < 2) return;
+      state.current.points.push(point);
+      redrawMask();
+    });
+    function finishStroke() {
+      if (!state.current) return;
+      state.strokes.push(state.current);
+      state.current = null;
+      redrawMask();
+    }
+    overlay.addEventListener('pointerup', finishStroke);
+    overlay.addEventListener('pointercancel', finishStroke);
+    window.addEventListener('keydown', event => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && document.activeElement?.tagName !== 'TEXTAREA') {
+        event.preventDefault(); state.strokes.pop(); redrawMask();
+      }
+    });
+    updateControls();
+  </script>
+</body>
+</html>
