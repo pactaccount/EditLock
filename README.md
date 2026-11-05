@@ -11,6 +11,7 @@ See [BASELINE.md](BASELINE.md) for the completed 24-case FLUX.2 evaluation and t
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the engineering design and build order.
 See [COMPARISON.md](COMPARISON.md) for the first full-workflow comparison and its limitations.
 See [CAR_EVALUATION.md](CAR_EVALUATION.md) for 12 creative car-image instructions and their completed results.
+See [CAR_RESULTS.md](CAR_RESULTS.md) to view each original car image, exact prompt, and edited output together.
 
 ## Use EditLock
 
