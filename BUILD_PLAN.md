@@ -6,7 +6,7 @@ Given an original image, a short edit instruction, and a user-selected edit area
 
 ## 1. Start with one model
 
-Use the pretrained Stable Diffusion v1.5 Inpainting checkpoint through Diffusers on the Mac's MPS backend. Begin with 512 px images and one image at a time. Do not train or fine-tune until the baseline has been measured.
+Use the pretrained Stable Diffusion v1.5 Inpainting checkpoint through Diffusers on the Mac's MPS backend. This checkpoint is the model; Apple's Core ML Stable Diffusion repository is only a possible later deployment toolkit. Begin with 512 px images and one image at a time. Do not train or fine-tune until the baseline has been measured.
 
 ## 2. Establish the baseline
 
