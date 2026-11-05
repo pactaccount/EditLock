@@ -8,6 +8,7 @@ This is a new, independent project. Model weights and generated images stay loca
 
 See [BUILD_PLAN.md](BUILD_PLAN.md) for the high-level plan and success criteria.
 See [BASELINE.md](BASELINE.md) for the completed 24-case FLUX.2 evaluation and the build decision it supports.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the engineering design and build order.
 
 ## Starting points
 
