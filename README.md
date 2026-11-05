@@ -21,7 +21,7 @@ The upstream projects and model are separate works with their own licenses. Edit
 
 ## Model check on the 48 GB M5 Pro
 
-FLUX.2 Klein 4B runs locally through MFLUX 0.24.0 and MLX 0.32.4. The official checkpoint is cached in `models/cache/` (about 15 GB). A 512 × 512, four-step image generation and an image-conditioned edit both completed successfully. The edit changed a blue mug to red; the room remained visually similar. This is a hardware and workflow smoke test, not proof of exact protected-region preservation.
+FLUX.2 Klein 4B runs locally through MFLUX 0.24.0 and MLX 0.32.4. The model files are stored locally in `models/cache/` (about 15 GB). A 512 × 512, four-step image generation and an image-conditioned edit both completed successfully. The edit changed a blue mug to red; the room remained visually similar. This is a hardware and workflow smoke test, not proof of exact protected-region preservation.
 
 | Run | Wall time | Peak MLX memory | Output |
 | --- | ---: | ---: | --- |
@@ -41,4 +41,4 @@ HF_HOME="$PWD/models/cache" .venv/bin/mflux-generate-flux2-edit \
   --output outputs/flux2-edit-smoke.png
 ```
 
-The checkpoint downloaded for this test has Hugging Face snapshot revision `e7b7dc27f91deacad38e78976d1f2b499d76a294`. The virtual environment, cache, and outputs are excluded from Git.
+The virtual environment, model files, and outputs are excluded from Git.
