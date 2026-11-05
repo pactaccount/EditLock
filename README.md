@@ -7,6 +7,7 @@ EditLock is a local image-editing app for making a requested change while keepin
 This is a new, independent project. Model weights and generated images stay local and are excluded from Git.
 
 See [BUILD_PLAN.md](BUILD_PLAN.md) for the high-level plan and success criteria.
+See [BASELINE.md](BASELINE.md) for the completed 24-case FLUX.2 evaluation and the build decision it supports.
 
 ## Starting points
 
