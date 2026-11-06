@@ -256,7 +256,7 @@
       const canUndoVersion = state.history.length > 0 && !state.busy;
       $('historyRow').hidden = !canUndoVersion;
       $('undoVersionButton').disabled = !canUndoVersion;
-      $('undoVersionButton').textContent = '↩ Undo to ' + (state.history.length === 1 ? 'Original' : 'Step ' + state.history.length);
+      $('undoVersionButton').textContent = '↩ Return to Step ' + state.history.length + ' result';
 
       const hasHistory = state.history.length > 0;
       $('previousView').hidden = !hasHistory;
@@ -401,12 +401,14 @@
         $('workspaceHelp').textContent = 'Result preview. Switch to ' + (state.history.length > 0 ? 'Step input' : 'Original') + ' to adjust paint.';
       } else if (isOriginal && state.original && state.history.length > 0) {
         $('sourceImage').src = state.original.url;
+        $('sourceImage').alt = 'Original imported photo';
         $('sourceImage').hidden = false;
         $('editedImage').hidden = true;
         overlay.hidden = true;
         $('workspaceHelp').textContent = 'Original imported photo for comparison.';
       } else {
         $('sourceImage').src = state.imageURL;
+        $('sourceImage').alt = state.history.length > 0 ? 'Current step input' : 'Original imported photo';
         $('sourceImage').hidden = false;
         $('editedImage').hidden = true;
         overlay.hidden = false;

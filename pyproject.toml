@@ -16,8 +16,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "httpx>=0.27,<1",
-  "ijson>=3,<4",
-  "requests>=2,<3",
 ]
 
 [build-system]
