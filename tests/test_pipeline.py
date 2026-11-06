@@ -73,6 +73,39 @@ class EditPipelineTests(unittest.TestCase):
             self.assertTrue(np.all(output[mask == 0] == [220, 20, 20]))
             self.assertIn("upper left", generator.last_prompt)
 
+    def test_chained_editing_uses_result_as_next_input_preserving_both_versions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            original_path = root / "original.png"
+            Image.new("RGB", (480, 320), (10, 20, 30)).save(original_path)
+
+            class SequenceGenerator:
+                def __init__(self):
+                    self.prompts = []
+
+                def generate(self, image_path: Path, prompt: str, width: int, height: int, seed: int) -> Image.Image:
+                    self.prompts.append(prompt)
+                    color = (255, 0, 0) if "first" in prompt else (0, 0, 255)
+                    return Image.new("RGB", (width, height), color)
+
+            pipeline = EditPipeline(SequenceGenerator(), root / "sessions")
+            step1 = pipeline.run(EditRequest(original_path, "first change: make red"))
+            self.assertTrue(step1.output_path.is_file())
+            step1_pixels = np.asarray(Image.open(step1.output_path))
+            self.assertTrue(np.all(step1_pixels == [255, 0, 0]))
+
+            # Continue editing from the result of step 1:
+            step2 = pipeline.run(EditRequest(step1.output_path, "second change: make blue"))
+            self.assertTrue(step2.output_path.is_file())
+            step2_pixels = np.asarray(Image.open(step2.output_path))
+            self.assertTrue(np.all(step2_pixels == [0, 0, 255]))
+
+            # The original and intermediate result are both still intact on disk:
+            orig_pixels = np.asarray(Image.open(original_path))
+            self.assertTrue(np.all(orig_pixels == [10, 20, 30]))
+            step1_reloaded = np.asarray(Image.open(step1.output_path))
+            self.assertTrue(np.all(step1_reloaded == [255, 0, 0]))
+
     def test_feather_never_changes_pixels_outside_mask(self):
         source = Image.new("RGB", (80, 80), (25, 50, 75))
         candidate = Image.new("RGB", (80, 80), (220, 0, 0))

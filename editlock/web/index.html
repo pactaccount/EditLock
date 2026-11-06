@@ -35,6 +35,7 @@
     .brand-mark { width: 30px; height: 30px; color: var(--accent); }
     .header-meta { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13px; }
     .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #2e967a; }
+    .version-badge { display: inline-flex; align-items: center; padding: 2px 8px; font-size: 11px; font-weight: 700; border-radius: 999px; background: #34413e; color: #7fc4b7; letter-spacing: .02em; }
     main { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 338px; }
     .workspace { min-width: 0; min-height: 520px; padding: 22px; background: var(--stage); display: flex; flex-direction: column; }
     .workspace-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #eaf2ef; margin-bottom: 15px; }
@@ -82,8 +83,10 @@
     textarea { width: 100%; min-height: 92px; resize: vertical; border: 1px solid #bfcac5; border-radius: 8px; padding: 11px 12px; color: var(--ink); background: #fff; line-height: 1.45; font-size: 13px; }
     textarea::placeholder { color: #5d6d67; }
     textarea:focus { border-color: var(--accent); outline: 3px solid #cce8df; }
-    .generate-row { margin-top: 14px; display: flex; gap: 8px; }
-    .generate-row .primary { flex: 1; }
+    .generate-row { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .generate-row .primary { flex: 1; min-width: 120px; }
+    #editResultButton { background: #eef7f4; border: 1px solid #7fc4b7; color: var(--accent); flex: 1; min-width: 120px; }
+    #editResultButton:hover:not(:disabled) { background: #d8ece6; border-color: var(--accent); }
     #cancelButton { display: none; color: var(--danger); }
     .export-section { margin-top: auto; border-top: 1px solid var(--line); border-bottom: 0; }
     #downloadLink { display: block; text-decoration: none; text-align: center; }
@@ -127,9 +130,13 @@
     <main>
       <section class="workspace" aria-label="Image editing workspace">
         <div class="workspace-head">
-          <div class="workspace-title" id="imageName">Your photo</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="workspace-title" id="imageName">Your photo</div>
+            <span class="version-badge" id="versionBadge" hidden>Step 1</span>
+          </div>
           <div class="view-switch" aria-label="Image view">
             <button id="originalView" type="button" aria-pressed="true">Original</button>
+            <button id="previousView" type="button" aria-pressed="false" hidden>Previous</button>
             <button id="resultView" type="button" aria-pressed="false" disabled>Result</button>
           </div>
         </div>
@@ -188,7 +195,11 @@
           <textarea id="instruction" placeholder="For example: Change the white pot to blue."></textarea>
           <div class="generate-row">
             <button class="primary" id="generateButton" type="button" disabled>Generate edit</button>
+            <button class="secondary" id="editResultButton" type="button" hidden>Edit this result</button>
             <button class="secondary" id="cancelButton" type="button">Cancel</button>
+          </div>
+          <div id="historyRow" style="margin-top:10px;" hidden>
+            <button class="subtle" id="undoVersionButton" type="button" style="width:100%;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--line);">↩ Undo to previous version</button>
           </div>
           <p class="hint">An edit usually takes several seconds. Retry makes another version.</p>
         </section>
@@ -212,9 +223,12 @@
     const BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
     const $ = (id) => document.getElementById(id);
     const state = {
+      original: null, // { path, url, width, height }
       imagePath: null, imageURL: null, width: 0, height: 0,
       strokes: [], current: null, tool: 'paint', brush: 55, margin: 0, lockOutside: false,
-      resultURL: null, seed: 42, busy: false, showingResult: false,
+      resultURL: null, currentResultPath: null, seed: 42, busy: false,
+      view: 'original', // 'original' | 'previous' | 'result'
+      history: [], // [ { stepNumber, imagePath, imageURL, resultPath, resultURL, instruction } ]
       controller: null
     };
     const overlay = $('maskOverlay');
@@ -233,14 +247,43 @@
       const hasImage = !!state.imagePath;
       const hasPaint = state.strokes.some(s => s.tool === 'paint');
       $('generateButton').disabled = !hasImage || (state.lockOutside && !hasPaint) || state.busy;
-      $('generateButton').textContent = state.resultURL ? 'Retry edit' : 'Generate edit';
+      $('generateButton').textContent = state.resultURL ? 'Retry edit' : (state.history.length > 0 ? 'Generate step ' + (state.history.length + 1) : 'Generate edit');
+
+      const canEditResult = !!state.resultURL && !state.busy;
+      $('editResultButton').hidden = !canEditResult;
+      $('editResultButton').disabled = !canEditResult;
+
+      const canUndoVersion = state.history.length > 0 && !state.busy;
+      $('historyRow').hidden = !canUndoVersion;
+      $('undoVersionButton').disabled = !canUndoVersion;
+      $('undoVersionButton').textContent = '↩ Undo to ' + (state.history.length === 1 ? 'Original' : 'Step ' + state.history.length);
+
+      const hasHistory = state.history.length > 0;
+      $('previousView').hidden = !hasHistory;
+      if (hasHistory) {
+        $('previousView').textContent = 'Step ' + (state.history.length + 1) + ' input';
+      }
+
+      $('versionBadge').hidden = !hasHistory;
+      if (hasHistory) {
+        $('versionBadge').textContent = 'Step ' + (state.history.length + 1);
+      }
+
       $('undoButton').disabled = state.strokes.length === 0 || state.busy;
       $('clearButton').disabled = state.strokes.length === 0 || state.busy;
       $('uploadButton').disabled = state.busy;
       $('emptyUpload').disabled = state.busy;
       $('resultView').disabled = !state.resultURL;
       $('cancelButton').style.display = state.busy ? 'block' : 'none';
-      $('downloadLink').setAttribute('aria-disabled', state.resultURL ? 'false' : 'true');
+
+      const hasDownload = !!state.resultURL || state.history.length > 0;
+      $('downloadLink').setAttribute('aria-disabled', hasDownload ? 'false' : 'true');
+      if (state.resultURL) {
+        $('downloadLink').href = state.resultURL;
+      } else if (state.history.length > 0) {
+        $('downloadLink').href = state.imageURL;
+      }
+
       $('instruction').disabled = state.busy;
       $('paintButton').disabled = state.busy;
       $('eraseButton').disabled = state.busy;
@@ -273,11 +316,14 @@
       try {
         const dataURL = await fileDataURL(file);
         const uploaded = await api('/upload', {kind:'photo', data_url:dataURL});
+        state.original = { path: uploaded.image_path, url: uploaded.asset_url, width: uploaded.width, height: uploaded.height };
         state.imagePath = uploaded.image_path;
         state.imageURL = uploaded.asset_url;
         state.width = uploaded.width; state.height = uploaded.height;
-        state.strokes = []; state.current = null; state.resultURL = null; state.seed = 42;
-        state.showingResult = false;
+        state.strokes = []; state.current = null;
+        state.resultURL = null; state.currentResultPath = null;
+        state.seed = 42;
+        state.history = [];
         overlay.width = mask.width = state.width;
         overlay.height = mask.height = state.height;
         maskCtx.fillStyle = '#000'; maskCtx.fillRect(0, 0, mask.width, mask.height);
@@ -288,8 +334,8 @@
         $('canvasWrap').hidden = false;
         $('emptyState').hidden = true;
         $('imageName').textContent = file.name;
-        $('workspaceHelp').textContent = 'Describe an edit, or paint an optional focus area first.';
-        setView(false);
+        $('instruction').value = '';
+        setView('original');
         setStatus('Photo ready. Describe the change you want. Painting is optional.');
       } catch (error) { setStatus(error.message, true); }
       finally { state.busy = false; updateControls(); }
@@ -338,16 +384,82 @@
       $('paintButton').setAttribute('aria-pressed', tool === 'paint');
       $('eraseButton').setAttribute('aria-pressed', tool === 'erase');
     }
-    function setView(result) {
-      state.showingResult = result && !!state.resultURL;
-      $('sourceImage').hidden = state.showingResult;
-      $('editedImage').hidden = !state.showingResult;
-      overlay.hidden = state.showingResult;
-      $('originalView').setAttribute('aria-pressed', !state.showingResult);
-      $('resultView').setAttribute('aria-pressed', state.showingResult);
-      $('workspaceHelp').textContent = state.showingResult
-        ? 'Result preview. Switch to Original to adjust the optional focus area.'
-        : 'Describe an edit, or paint an optional focus area first.';
+    function setView(target) {
+      state.view = target;
+      const isOriginal = target === 'original';
+      const isPrevious = target === 'previous';
+      const isResult = target === 'result';
+
+      $('originalView').setAttribute('aria-pressed', isOriginal);
+      $('previousView').setAttribute('aria-pressed', isPrevious);
+      $('resultView').setAttribute('aria-pressed', isResult);
+
+      if (isResult && state.resultURL) {
+        $('sourceImage').hidden = true;
+        $('editedImage').hidden = false;
+        overlay.hidden = true;
+        $('workspaceHelp').textContent = 'Result preview. Switch to ' + (state.history.length > 0 ? 'Step input' : 'Original') + ' to adjust paint.';
+      } else if (isOriginal && state.original && state.history.length > 0) {
+        $('sourceImage').src = state.original.url;
+        $('sourceImage').hidden = false;
+        $('editedImage').hidden = true;
+        overlay.hidden = true;
+        $('workspaceHelp').textContent = 'Original imported photo for comparison.';
+      } else {
+        $('sourceImage').src = state.imageURL;
+        $('sourceImage').hidden = false;
+        $('editedImage').hidden = true;
+        overlay.hidden = false;
+        $('workspaceHelp').textContent = 'Describe an edit, or paint an optional focus area first.';
+      }
+    }
+    function editThisResult() {
+      if (!state.currentResultPath || !state.resultURL || state.busy) return;
+      const stepNumber = state.history.length + 1;
+      state.history.push({
+        stepNumber,
+        imagePath: state.imagePath,
+        imageURL: state.imageURL,
+        resultPath: state.currentResultPath,
+        resultURL: state.resultURL,
+        instruction: $('instruction').value.trim(),
+        strokes: state.strokes,
+        lockOutside: state.lockOutside,
+        seed: state.seed
+      });
+      state.imagePath = state.currentResultPath;
+      state.imageURL = state.resultURL;
+      state.currentResultPath = null;
+      state.resultURL = null;
+      state.strokes = [];
+      redrawMask();
+      $('sourceImage').src = state.imageURL;
+      $('editedImage').src = BLANK_IMAGE;
+      $('instruction').value = '';
+      state.seed = 42;
+      setView('previous');
+      setStatus('Now editing from Step ' + stepNumber + ' result. Enter your next instruction or paint a focus area.');
+      updateControls();
+      $('instruction').focus();
+    }
+    function undoVersion() {
+      if (state.history.length === 0 || state.busy) return;
+      const last = state.history.pop();
+      state.imagePath = last.imagePath;
+      state.imageURL = last.imageURL;
+      state.currentResultPath = last.resultPath;
+      state.resultURL = last.resultURL;
+      state.strokes = last.strokes;
+      state.lockOutside = last.lockOutside;
+      $('lockOutside').checked = state.lockOutside;
+      redrawMask();
+      $('sourceImage').src = state.imageURL;
+      $('editedImage').src = last.resultURL;
+      $('instruction').value = last.instruction;
+      state.seed = last.seed;
+      setView('result');
+      setStatus('Reverted to Step ' + (state.history.length + 1) + ' result.');
+      updateControls();
     }
     async function generate() {
       if (!state.imagePath || state.busy) return;
@@ -371,11 +483,12 @@
           feather_px: 10
         }, state.controller.signal);
         if (edited.mode === 'locked' && !edited.protected_pixels_identical) throw new Error('The protected area changed. The result was not exported.');
+        state.currentResultPath = edited.output_path;
         state.resultURL = edited.result_url;
         state.seed += 1;
         $('editedImage').src = edited.result_url;
         $('downloadLink').href = edited.result_url;
-        setView(true);
+        setView('result');
         const detail = edited.mode === 'locked' ? ' Outside pixels are unchanged.' : edited.mode === 'guided' ? ' Painted focus was used as guidance.' : ' Instruction-only edit.';
         setStatus('Edit ready in ' + edited.elapsed_seconds.toFixed(1) + ' seconds.' + detail);
       } catch (error) {
@@ -397,12 +510,15 @@
     $('lockOutside').addEventListener('change', event => { state.lockOutside = event.target.checked; updateControls(); });
     $('undoButton').addEventListener('click', () => { state.strokes.pop(); redrawMask(); });
     $('clearButton').addEventListener('click', () => { state.strokes = []; redrawMask(); });
-    $('originalView').addEventListener('click', () => setView(false));
-    $('resultView').addEventListener('click', () => setView(true));
+    $('originalView').addEventListener('click', () => setView('original'));
+    $('previousView').addEventListener('click', () => setView('previous'));
+    $('resultView').addEventListener('click', () => setView('result'));
+    $('editResultButton').addEventListener('click', editThisResult);
+    $('undoVersionButton').addEventListener('click', undoVersion);
     $('generateButton').addEventListener('click', generate);
     $('cancelButton').addEventListener('click', () => state.controller?.abort());
     overlay.addEventListener('pointerdown', event => {
-      if (!state.imagePath || state.busy || state.showingResult) return;
+      if (!state.imagePath || state.busy || state.view === 'result' || (state.view === 'original' && state.history.length > 0)) return;
       event.preventDefault(); overlay.setPointerCapture(event.pointerId);
       state.current = {tool: state.tool, brush: state.brush, points: [pointFromEvent(event)]};
       redrawMask();

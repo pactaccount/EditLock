@@ -9,6 +9,25 @@ struct MaskStroke {
     let width: CGFloat
 }
 
+struct EditVersion {
+    let sourceURL: URL
+    let sourceImage: NSImage
+    let resultURL: URL
+    let resultImage: NSImage
+    let instruction: String
+    let strokes: [MaskStroke]
+    let lockOutsidePaint: Bool
+    let seed: Int
+}
+
+enum ViewMode: String, CaseIterable, Identifiable {
+    case original = "Original"
+    case previous = "Previous"
+    case result = "Result"
+
+    var id: String { rawValue }
+}
+
 private struct PrepareRequest: Encodable { let image_path: String }
 private struct PrepareResponse: Decodable { let image_path: String; let width: Int; let height: Int }
 private struct EditRequestBody: Encodable {
@@ -45,11 +64,43 @@ final class EditLockState: ObservableObject {
     @Published var maskMargin = 0.0 { didSet { rebuildMaskPreview() } }
     @Published var lockOutsidePaint = false
     @Published var erasing = false
-    @Published var showResult = false
+    @Published var viewMode: ViewMode = .original
     @Published var isBusy = false
     @Published var status = "Import a photo to begin."
     @Published var errorMessage: String?
     @Published var strokes: [MaskStroke] = []
+
+    @Published private(set) var originalPhoto: NSImage?
+    @Published private(set) var originalURL: URL?
+    @Published private(set) var history: [EditVersion] = []
+
+    var displayedImage: NSImage? {
+        switch viewMode {
+        case .original:
+            return originalPhoto ?? photo
+        case .previous:
+            return photo
+        case .result:
+            return result ?? photo
+        }
+    }
+
+    var isPaintingAllowed: Bool {
+        guard !isBusy, photo != nil else { return false }
+        if history.isEmpty {
+            return viewMode == .original
+        } else {
+            return viewMode == .previous
+        }
+    }
+
+    var availableViewModes: [ViewMode] {
+        if result != nil {
+            return history.isEmpty ? [.original, .result] : [.original, .previous, .result]
+        } else {
+            return history.isEmpty ? [.original] : [.original, .previous]
+        }
+    }
 
     private(set) var sourceURL: URL?
     private(set) var resultURL: URL?
@@ -90,14 +141,17 @@ final class EditLockState: ObservableObject {
                 guard let image = NSImage(contentsOfFile: prepared.image_path) else {
                     throw EditLockAppError.message("The prepared photo could not be opened.")
                 }
+                originalPhoto = image
+                originalURL = URL(fileURLWithPath: prepared.image_path)
                 sourceURL = URL(fileURLWithPath: prepared.image_path)
                 photo = image
                 imageSize = CGSize(width: prepared.width, height: prepared.height)
                 strokes = []
+                history = []
                 rebuildMaskPreview()
                 result = nil
                 resultURL = nil
-                showResult = false
+                viewMode = .original
                 seed = 42
                 status = "Describe the change you want. Painting a focus area is optional."
             } catch {
@@ -108,10 +162,9 @@ final class EditLockState: ObservableObject {
     }
 
     func addStroke(_ stroke: MaskStroke) {
-        guard photo != nil, !stroke.points.isEmpty else { return }
+        guard photo != nil, isPaintingAllowed, !stroke.points.isEmpty else { return }
         strokes.append(stroke)
         rebuildMaskPreview()
-        showResult = false
     }
 
     func undoStroke() {
@@ -161,7 +214,7 @@ final class EditLockState: ObservableObject {
                 }
                 resultURL = URL(fileURLWithPath: response.output_path)
                 result = edited
-                showResult = true
+                viewMode = .result
                 seed += 1
                 let detail = response.mode == "locked" ? "Outside pixels are unchanged." :
                     response.mode == "guided" ? "Painted focus was used as guidance." : "Instruction-only edit."
@@ -175,6 +228,49 @@ final class EditLockState: ObservableObject {
         }
     }
 
+    func editThisResult() {
+        guard let currentResult = result, let currentResultURL = resultURL,
+              let currentSource = photo, let currentSourceURL = sourceURL, !isBusy else { return }
+        let stepNumber = history.count + 1
+        let prev = EditVersion(
+            sourceURL: currentSourceURL,
+            sourceImage: currentSource,
+            resultURL: currentResultURL,
+            resultImage: currentResult,
+            instruction: instruction,
+            strokes: strokes,
+            lockOutsidePaint: lockOutsidePaint,
+            seed: seed
+        )
+        history.append(prev)
+        photo = currentResult
+        sourceURL = currentResultURL
+        result = nil
+        resultURL = nil
+        instruction = ""
+        strokes = []
+        rebuildMaskPreview()
+        viewMode = .previous
+        seed = 42
+        status = "Editing from Step \(stepNumber) result. Enter the next instruction or paint a focus area."
+    }
+
+    func revertToPreviousVersion() {
+        guard !history.isEmpty, !isBusy else { return }
+        let last = history.removeLast()
+        photo = last.sourceImage
+        sourceURL = last.sourceURL
+        instruction = last.instruction
+        result = last.resultImage
+        resultURL = last.resultURL
+        lockOutsidePaint = last.lockOutsidePaint
+        strokes = last.strokes
+        rebuildMaskPreview()
+        viewMode = .result
+        seed = last.seed
+        status = "Reverted to Step \(history.count + 1) result."
+    }
+
     func cancel() {
         activeTask?.cancel()
         engine?.terminate()
@@ -184,7 +280,7 @@ final class EditLockState: ObservableObject {
     }
 
     func exportResult() {
-        guard let resultURL else { return }
+        guard let targetURL = resultURL ?? (history.isEmpty ? nil : sourceURL) else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = "EditLock-Result.png"
@@ -193,7 +289,7 @@ final class EditLockState: ObservableObject {
                 if FileManager.default.fileExists(atPath: destination.path) {
                     try FileManager.default.removeItem(at: destination)
                 }
-                try FileManager.default.copyItem(at: resultURL, to: destination)
+                try FileManager.default.copyItem(at: targetURL, to: destination)
                 status = "Saved to \(destination.lastPathComponent)."
             } catch { errorMessage = error.localizedDescription }
         }

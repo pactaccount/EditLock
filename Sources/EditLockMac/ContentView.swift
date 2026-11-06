@@ -21,14 +21,14 @@ struct ContentView: View {
 
             HStack(alignment: .top, spacing: 18) {
                 Group {
-                    if let image = state.showResult ? state.result : state.photo {
+                    if let image = state.displayedImage {
                         MaskEditorView(
                             image: image,
-                            mask: state.showResult ? nil : state.maskPreview,
+                            mask: state.isPaintingAllowed ? state.maskPreview : nil,
                             imageSize: state.imageSize,
                             brushSize: state.brushSize,
                             erasing: state.erasing,
-                            paintingEnabled: !state.showResult && !state.isBusy,
+                            paintingEnabled: state.isPaintingAllowed,
                             onStroke: state.addStroke
                         )
                     } else {
@@ -106,6 +106,18 @@ struct ContentView: View {
                 .font(.caption).foregroundStyle(.secondary)
 
             Divider()
+            if !state.history.isEmpty {
+                HStack(spacing: 6) {
+                    Text("Step \(state.history.count + 1)")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.tint.opacity(0.15), in: Capsule())
+                    Text("Chained edit")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Text("Describe the edit").font(.headline)
             TextField("e.g. Change the pot to blue", text: $state.instruction, axis: .vertical)
                 .lineLimit(3...5)
@@ -116,23 +128,50 @@ struct ContentView: View {
             if state.isBusy {
                 Button("Cancel Edit", role: .destructive) { state.cancel() }
             } else {
-                Button(state.result == nil ? "Generate Edit" : "Retry with New Seed") {
-                    state.generate()
+                VStack(spacing: 8) {
+                    if state.result != nil {
+                        Button("Edit this result") {
+                            state.editThisResult()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.accentColor)
+                    }
+
+                    if state.result == nil {
+                        Button("Generate Edit") {
+                            state.generate()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(state.photo == nil || (state.lockOutsidePaint && !state.strokes.contains(where: { !$0.erase })))
+                    } else {
+                        Button("Retry with New Seed") {
+                            state.generate()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(state.photo == nil || (state.lockOutsidePaint && !state.strokes.contains(where: { !$0.erase })))
+                    }
+
+                    if !state.history.isEmpty {
+                        Button("Undo to Previous Version") {
+                            state.revertToPreviousVersion()
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(state.photo == nil || (state.lockOutsidePaint && !state.strokes.contains(where: { !$0.erase })))
             }
 
             Divider()
             Text("Review and export").font(.headline)
-            Picker("View", selection: $state.showResult) {
-                Text("Original").tag(false)
-                Text("Result").tag(true)
+            Picker("View", selection: $state.viewMode) {
+                ForEach(state.availableViewModes) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
             }
             .pickerStyle(.segmented)
-            .disabled(state.result == nil)
+            .disabled(state.result == nil && state.history.isEmpty)
             Button("Export PNG") { state.exportResult() }
-                .disabled(state.result == nil || state.isBusy)
+                .disabled((state.result == nil && state.history.isEmpty) || state.isBusy)
             Spacer()
             Text("Your images and model run on this Mac.")
                 .font(.caption).foregroundStyle(.secondary)
